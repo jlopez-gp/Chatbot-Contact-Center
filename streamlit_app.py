@@ -148,7 +148,7 @@ elif tab == "BORRADORES EMAIL":
             with st.spinner("Generando borrador de email..."):
                 url = "https://az-email-response-assistant-dev.azurewebsites.net/drafter/email_response_assistant"
                 headers = {
-                    "function_key": "Ay6-egV-moko5w3knTm35bkVgEGQqirDm9aFnGpzck9YAzFucR7Q7w==",
+                    "function_key": "",
                     "Content-Type": "application/json"
                 }
                 payload = {
