@@ -59,7 +59,7 @@ st.write(
 )
 
 # Selector de pestañas en una sola línea
-tab_names = ["CHAT", "BORRADORES EMAIL"]
+tab_names = ["CHAT", "BORRADORES"]
 if "tab" not in st.session_state:
     st.session_state.tab = tab_names[0]
 
@@ -83,9 +83,9 @@ if "chat_messages" not in st.session_state:
 if "email_messages" not in st.session_state:
     st.session_state.email_messages = []
 
-def render_chat_messages(messages):
+def render_chat_messages(messages, copy_enabled=False):
     with st.container():
-        for message in messages:
+        for idx, message in enumerate(messages):
             if message["role"] == "user":
                 st.markdown(f"""
                     <div class='user-box'>
@@ -98,6 +98,11 @@ def render_chat_messages(messages):
                         <span class='chat-icon'>🤖</span><b>SOL:</b><br> {message['content']}
                     </div>
                 """, unsafe_allow_html=True)
+                if copy_enabled:
+                    copy_key = f"copy_email_{idx}"
+                    if st.button("Copiar borrador", key=copy_key):
+                        st.session_state["copied_email_text"] = message["content"]
+                        st.toast("¡Borrador copiado al portapapeles!")
 
 if tab == "CHAT":
     render_chat_messages(st.session_state.chat_messages)
@@ -125,8 +130,8 @@ if tab == "CHAT":
                 st.session_state.chat_messages.append({"role": "assistant", "content": response})
         st.rerun()
 
-elif tab == "BORRADORES EMAIL":
-    render_chat_messages(st.session_state.email_messages)
+elif tab == "BORRADORES":
+    render_chat_messages(st.session_state.email_messages, copy_enabled=True)
 
     st.markdown("<div style='margin-top:24px'></div>", unsafe_allow_html=True)
     prompt = st.text_input("Escribe el contenido para el borrador de email", "", key="email_input")
@@ -173,4 +178,3 @@ elif tab == "BORRADORES EMAIL":
             if not st.session_state["stop_requested_email"]:
                 st.session_state.email_messages.append({"role": "assistant", "content": email_text})
         st.rerun()
- 
