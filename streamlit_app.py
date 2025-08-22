@@ -1,28 +1,46 @@
 import streamlit as st
-from openai import OpenAI
+from agent_qa_automated import process_question
 import requests
 
-# Título y descripción en español, adaptado para Contact Center Grupo Piñero
-st.title("💬 Chatbot Contact Center Grupo Piñero")
-st.write(
-    "Bienvenido al asistente conversacional para el Contact Center de Grupo Piñero. "
-)
-
-# Campo para la API Key, desaparece tras rellenarse
-if "openai_api_key" not in st.session_state:
-    openai_api_key = st.text_input("Clave API de OpenAI", type="password")
-    if openai_api_key:
-        st.session_state.openai_api_key = openai_api_key
-        st.rerun()
-    else:
-        st.info("Por favor, añade tu clave API de OpenAI para continuar.", icon="🗝️")
-        st.stop()
-else:
-    openai_api_key = st.session_state.openai_api_key
-
-# Estilos personalizados para los botones primarios (azul oscuro)
+# Estilos personalizados (importados de app_chatbot.py)
 st.markdown("""
     <style>
+    body {
+        background-color: #f5f7fa;
+    }
+    .chat-container {
+        max-height: 500px;
+        overflow-y: auto;
+        padding: 8px;
+        background: #e3eafc;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        margin-bottom: 16px;
+    }
+    .user-box {
+        background: linear-gradient(90deg, #e3f2fd 60%, #bbdefb 100%);
+        color: #1976d2;
+        border-radius: 10px;
+        padding: 10px 16px;
+        margin: 8px 0 8px auto;
+        max-width: 70%;
+        text-align: right;
+        box-shadow: 0 1px 4px rgba(25,118,210,0.08);
+    }
+    .assistant-box {
+        background: linear-gradient(90deg, #fffde7 60%, #ffe082 100%);
+        color: #6d4c41;
+        border-radius: 10px;
+        padding: 10px 16px;
+        margin: 8px auto 8px 0;
+        max-width: 70%;
+        text-align: left;
+        box-shadow: 0 1px 4px rgba(255,193,7,0.08);
+    }
+    .chat-icon {
+        font-size: 1.2em;
+        margin-right: 6px;
+    }
     .stButton > button[data-testid="baseButton-primary"] {
         background-color: #003366 !important;
         color: #fff !important;
@@ -33,6 +51,12 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
+# Título y descripción en español, adaptado para Contact Center Grupo Piñero
+st.title("💬 Chatbot Contact Center Grupo Piñero")
+st.write(
+    "Bienvenido al asistente conversacional para el Contact Center de Grupo Piñero. "
+)
 
 # Selector de pestañas en una sola línea
 tab_names = ["CHAT", "BORRADORES EMAIL"]
@@ -53,53 +77,74 @@ for i, name in enumerate(tab_names):
 
 tab = st.session_state.tab
 
-# Inicializar mensajes
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# Inicializar historiales separados
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = []
+if "email_messages" not in st.session_state:
+    st.session_state.email_messages = []
+
+def render_chat_messages(messages):
+    with st.container():
+        for message in messages:
+            if message["role"] == "user":
+                st.markdown(f"""
+                    <div class='user-box'>
+                        <span class='chat-icon'>🧑</span><b>Tú:</b> {message['content']}
+                    </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                    <div class='assistant-box'>
+                        <span class='chat-icon'>🤖</span><b>SOL:</b> {message['content']}
+                    </div>
+                """, unsafe_allow_html=True)
 
 if tab == "CHAT":
-    # Cliente OpenAI
-    client = OpenAI(api_key=openai_api_key)
+    render_chat_messages(st.session_state.chat_messages)
 
-    # Mostrar mensajes previos
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    st.markdown("<div style='margin-top:24px'></div>", unsafe_allow_html=True)
+    prompt = st.text_input("¿En qué puedo ayudarte?", "", key="chat_input")
+    col1, col2 = st.columns([3,1])
+    with col1:
+        enviar = st.button("Enviar", use_container_width=True)
+    with col2:
+        detener = st.button("Detener ejecución", use_container_width=True)
 
-    # Entrada de chat
-    if prompt := st.chat_input("¿En qué puedo ayudarte?"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+    if "stop_requested" not in st.session_state:
+        st.session_state["stop_requested"] = False
+    if detener:
+        st.session_state["stop_requested"] = True
 
-        # Mensaje de carga mientras se genera la respuesta
-        with st.chat_message("assistant"):
-            with st.spinner("Generando respuesta..."):
-                stream = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": m["role"], "content": m["content"]}
-                        for m in st.session_state.messages
-                    ],
-                    stream=True,
-                )
-                response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+    if enviar:
+        st.session_state["stop_requested"] = False
+        if prompt.strip():
+            with st.spinner("Generando respuesta, por favor espera..."):
+                response = process_question(prompt)
+            if not st.session_state["stop_requested"]:
+                st.session_state.chat_messages.append({"role": "user", "content": prompt})
+                st.session_state.chat_messages.append({"role": "assistant", "content": response})
+        st.rerun()
 
 elif tab == "BORRADORES EMAIL":
-    # Mostrar mensajes previos
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    render_chat_messages(st.session_state.email_messages)
 
-    # Entrada de borrador
-    if prompt := st.chat_input("Escribe el contenido para el borrador de email"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+    st.markdown("<div style='margin-top:24px'></div>", unsafe_allow_html=True)
+    prompt = st.text_input("Escribe el contenido para el borrador de email", "", key="email_input")
+    col1, col2 = st.columns([3,1])
+    with col1:
+        enviar = st.button("Enviar borrador", use_container_width=True, key="enviar_email")
+    with col2:
+        detener = st.button("Detener ejecución borrador", use_container_width=True, key="detener_email")
 
-        # Mensaje de carga mientras se genera el borrador
-        with st.chat_message("assistant"):
+    if "stop_requested_email" not in st.session_state:
+        st.session_state["stop_requested_email"] = False
+    if detener:
+        st.session_state["stop_requested_email"] = True
+
+    if enviar:
+        st.session_state["stop_requested_email"] = False
+        if prompt.strip():
+            st.session_state.email_messages.append({"role": "user", "content": prompt})
             with st.spinner("Generando borrador de email..."):
                 url = "https://az-email-response-assistant-dev.azurewebsites.net/drafter/email_response_assistant"
                 headers = {
@@ -117,7 +162,6 @@ elif tab == "BORRADORES EMAIL":
                 try:
                     response = requests.post(url, json=payload, headers=headers)
                     data = response.json()
-                    # Extraer el campo 'response' de 'results'
                     email_text = (
                         data["results"][0]["response"]
                         if "results" in data and data["results"]
@@ -126,5 +170,7 @@ elif tab == "BORRADORES EMAIL":
                 except Exception as e:
                     email_text = f"Error al obtener el borrador: {e}"
 
-                st.markdown(email_text)
-        st.session_state.messages.append({"role": "assistant", "content": email_text})
+            if not st.session_state["stop_requested_email"]:
+                st.session_state.email_messages.append({"role": "assistant", "content": email_text})
+        st.rerun()
+ 
