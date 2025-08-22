@@ -89,13 +89,13 @@ def render_chat_messages(messages):
             if message["role"] == "user":
                 st.markdown(f"""
                     <div class='user-box'>
-                        <span class='chat-icon'>🧑</span><b>Tú:</b> {message['content']}
+                        <span class='chat-icon'>🧑</span><b>Tú:</b><br> {message['content']}
                     </div>
                 """, unsafe_allow_html=True)
             else:
                 st.markdown(f"""
                     <div class='assistant-box'>
-                        <span class='chat-icon'>🤖</span><b>SOL:</b> {message['content']}
+                        <span class='chat-icon'>🤖</span><b>SOL:</b><br> {message['content']}
                     </div>
                 """, unsafe_allow_html=True)
 
