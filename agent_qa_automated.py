@@ -1,4 +1,3 @@
-
 import time
 import pandas as pd
 import logging
@@ -19,7 +18,7 @@ logging.basicConfig(
 
 AZURE_OPENAI_ENDPOINT = "https://cog-gpn-chatgpt-dev-openai-02.openai.azure.com/"
 AZURE_OPENAI_API_KEY = "74d9fff52c024d91a6500f37d4002144"
-ASSISTANT_ID = "asst_EkL99SjZcNm1rC5TGscnoJkj"
+ASSISTANT_ID = "asst_P3GFW4uWQ2EWCSbZro8hkUZo"
 
 client = AzureOpenAI(
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
@@ -64,24 +63,44 @@ def wait_for_response(thread_id: str, run_id: str, max_retries=8, wait_seconds=2
 
 
 def get_openai_response(question: str) -> str:
-    """Queries the OpenAI API and returns the response."""
+    """Queries the OpenAI API and returns the response using the thread/run pattern."""
     try:
+        # Create a thread
         thread = client.beta.threads.create()
+        # Add a user question to the thread
         client.beta.threads.messages.create(
             thread_id=thread.id,
             role="user",
             content=question
         )
+        # Run the thread
         run = client.beta.threads.runs.create(
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID
         )
-        response = wait_for_response(thread.id, run.id)
-        try:
-            client.beta.threads.delete(thread_id=thread.id)
-        except Exception as exc:
-            logging.warning(f"Could not delete thread {thread.id}: {exc}")
-        return response if response else "ERROR: empty response"
+        # Loop until the run completes or fails
+        while run.status in ['queued', 'in_progress', 'cancelling']:
+            time.sleep(1)
+            run = client.beta.threads.runs.retrieve(
+                thread_id=thread.id,
+                run_id=run.id
+            )
+        if run.status == 'completed':
+            messages = client.beta.threads.messages.list(thread_id=thread.id)
+            assistant_messages = [m for m in messages.data if m.role == "assistant" and m.content]
+            if assistant_messages:
+                # Return the longest message (as in previous logic)
+                longest_message = max(
+                    assistant_messages,
+                    key=lambda m: len(m.content[0].text.value) if m.content and hasattr(m.content[0], 'text') and hasattr(m.content[0].text, 'value') else 0
+                )
+                return longest_message.content[0].text.value
+            return "ERROR: No assistant response found."
+        elif run.status == "requires_action":
+            # the assistant requires calling some functions and submit the tool outputs back to the run
+            return "ERROR: requires_action"
+        else:
+            return f"ERROR: run status {run.status}"
     except Exception as exc:
         logging.error(f"Error processing question: {exc}")
         return f"ERROR: {exc}"
